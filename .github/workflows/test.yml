@@ -1,0 +1,24 @@
+name: Tests
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python tools/check_source.py
+      - run: python -m unittest discover -s mac
+      - if: runner.os != 'Windows'
+        run: python -m unittest discover -s tests
+      - if: runner.os == 'macOS'
+        run: python -m unittest discover -s mac/full_tunnel
+      - if: runner.os == 'macOS'
+        run: xcodebuild -quiet -project ios/CellularTunnel.xcodeproj -scheme CellularTunnel -configuration Debug -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO build
