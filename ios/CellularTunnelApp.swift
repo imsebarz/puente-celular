@@ -1,6 +1,15 @@
 import SwiftUI
 import UniformTypeIdentifiers
 import UIKit
+import CoreTransferable
+
+private struct ClientProfile: Transferable {
+    let data: Data
+    static var transferRepresentation: some TransferRepresentation {
+        DataRepresentation(exportedContentType: .json) { $0.data }
+            .suggestedFileName("mac-config.json")
+    }
+}
 
 @MainActor
 final class TunnelModel: ObservableObject {
@@ -18,12 +27,14 @@ final class TunnelModel: ObservableObject {
     @Published var loaded = false
     @Published var running = false
     @Published var fingerprint = ""
+    @Published private(set) var devices: [PairedDevice] = []
+    @Published var deviceNotice = ""
     private var package: PairingPackage?
     private var server: TunnelServer?
 
     func load(url: URL) {
         stop()
-        package = nil; loaded = false; fingerprint = ""
+        package = nil; loaded = false; fingerprint = ""; devices = []; deviceNotice = ""
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
         do {
@@ -32,6 +43,7 @@ final class TunnelModel: ObservableObject {
             let data = try Data(contentsOf: url)
             let decoded = try JSONDecoder().decode(PairingPackage.self, from: data)
             _ = try decoded.identity()
+            devices = try DeviceStore(fingerprint: decoded.certificate_sha256).load(initialToken: decoded.token)
             package = decoded; loaded = true
             fingerprint = decoded.certificate_sha256
             status = "Emparejamiento cargado solo en memoria. Pulsa Iniciar."
@@ -65,7 +77,7 @@ final class TunnelModel: ObservableObject {
                 self.stop()
                 self.status = "El servidor falló. Puedes volver a Iniciar."
             }
-            try host.start(package: package)
+            try host.start(package: package, devices: devices)
             server = host; running = true
             UIApplication.shared.isIdleTimerDisabled = true
             status = "Iniciando servidor cifrado…"
@@ -79,7 +91,86 @@ final class TunnelModel: ObservableObject {
         status = "Detenido. Ninguna sesión activa."
     }
 
-    func forget() { stop(); package = nil; loaded = false; fingerprint = "" }
+    private func commit(_ updated: [PairedDevice]) throws {
+        guard let package else { throw DeviceAccessError.missing }
+        try DeviceStore(fingerprint: package.certificate_sha256).save(updated)
+        server?.updateDevices(updated)
+        devices = updated
+    }
+
+    func addDevice(name: String, gateway: String) -> Bool {
+        do {
+            let device = try PairedDevice.issue(name: name, gateway: gateway, among: devices)
+            try commit(devices + [device])
+            deviceNotice = "Equipo añadido. Comparte su configuración solo con ese equipo."
+            return true
+        } catch { deviceNotice = error.localizedDescription; return false }
+    }
+
+    func revoke(_ device: PairedDevice) {
+        do {
+            guard devices.contains(where: { $0.id == device.id }) else { throw DeviceAccessError.missing }
+            try commit(devices.filter { $0.id != device.id })
+            deviceNotice = "Acceso retirado a " + device.name + "."
+        } catch { deviceNotice = error.localizedDescription }
+    }
+
+    fileprivate func profile(for device: PairedDevice) -> ClientProfile? {
+        guard let package, let data = try? device.profile(for: package) else { return nil }
+        return ClientProfile(data: data)
+    }
+
+    func forget() { stop(); package = nil; loaded = false; fingerprint = ""; devices = []; deviceNotice = "" }
+}
+
+private struct DeviceList: View {
+    @ObservedObject var model: TunnelModel
+    @State private var adding = false
+    @State private var name = ""
+    @State private var gateway = "172.20.10.1"
+    @State private var revoking: PairedDevice?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Equipos autorizados").font(.headline)
+            ForEach(model.devices) { device in
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(device.name).fontWeight(.medium)
+                    if let profile = model.profile(for: device) {
+                        ShareLink(item: profile, preview: SharePreview("Configuración de " + device.name)) {
+                            Label("Compartir configuración", systemImage: "square.and.arrow.up")
+                        }.accessibilityLabel("Compartir configuración de " + device.name)
+                    } else {
+                        Text("Incluye a quienes tengan una copia del archivo inicial.").font(.footnote)
+                    }
+                    Button("Quitar acceso", role: .destructive) { revoking = device }
+                        .accessibilityLabel("Quitar acceso a " + device.name)
+                }
+                Divider()
+            }
+            if !model.deviceNotice.isEmpty { Text(model.deviceNotice).font(.callout) }
+            if adding {
+                TextField("Nombre del equipo", text: $name).textFieldStyle(.roundedBorder)
+                Text("Dirección del iPhone en el hotspot").font(.caption)
+                TextField("Dirección IPv4", text: $gateway).keyboardType(.decimalPad).textFieldStyle(.roundedBorder)
+                HStack {
+                    Button("Guardar equipo") {
+                        if model.addDevice(name: name, gateway: gateway) { name = ""; adding = false }
+                    }
+                    Button("Cancelar") { adding = false; name = "" }
+                }
+            } else {
+                Button("Añadir equipo") { adding = true }
+            }
+        }
+        .alert("¿Quitar acceso?", isPresented: Binding(get: { revoking != nil },
+              set: { if !$0 { revoking = nil } }), presenting: revoking) { device in
+            Button("Quitar acceso", role: .destructive) { model.revoke(device) }
+            Button("Cancelar", role: .cancel) {}
+        } message: { device in
+            Text("Se cerrarán las conexiones de " + device.name + " y su archivo de configuración dejará de funcionar.")
+        }
+    }
 }
 
 @main
@@ -101,7 +192,8 @@ struct CellularTunnelApp: App {
                         Text(model.fingerprint).font(.system(.caption, design: .monospaced)).textSelection(.enabled)
                         Button("Iniciar") { model.start() }.disabled(model.running)
                         Button("Detener") { model.stop() }.disabled(!model.running)
-                        Button("Olvidar emparejamiento") { model.forget() }
+                        Button("Cerrar emparejamiento") { model.forget() }
+                        DeviceList(model: model)
                     }
                     Text("No modifica tu plan ni garantiza evitar la cuota del operador. No captura por sí solo todo el tráfico del Mac. Mantén el iPhone conectado a corriente.")
                         .font(.footnote)

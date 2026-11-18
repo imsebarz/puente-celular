@@ -19,7 +19,7 @@ python3 tools/create_pairing.py --server-host 172.20.10.1 --output "$HOME/puente
 ```
 
 4. Transfiere **solo** `iphone-pairing.json` al iPhone por un medio privado. En la app, pulsa **Importar emparejamiento privado**, selecciona ese archivo y pulsa **Iniciar**. El archivo contiene la clave privada del teléfono. Guárdalo bajo tu control.
-5. Entrega `mac-config.json` por un medio privado al receptor de confianza. A pesar de su nombre, el cliente de escritorio usa el mismo formato en los tres sistemas.
+5. Guarda `mac-config.json` para el primer receptor. En el iPhone aparece como **Emparejamiento inicial**. Para otros receptores, crea un perfil individual siguiendo los pasos de abajo. El cliente de escritorio usa el mismo formato en los tres sistemas.
 
 ## Conectar un receptor
 
@@ -40,7 +40,13 @@ En la aplicación receptora configura SOCKS5 en `127.0.0.1`, puerto `1080`, con 
 
 ## Varios equipos y clientes móviles
 
-Cada escritorio ejecuta su propio cliente y escucha solo en loopback. Con el protocolo actual, los receptores de confianza del mismo iPhone comparten el token del teléfono y su capacidad total. Cambiar el emparejamiento exige actualizar todos esos receptores. Para terceros que deban tener acceso revocable por separado, el siguiente paso es emitir una credencial por dispositivo y repartir la capacidad entre clientes.
+1. Con el emparejamiento cargado, abre **Equipos autorizados → Añadir equipo**. Escribe un nombre reconocible y la dirección IPv4 privada del iPhone que muestra la conexión Wi-Fi del equipo. Pulsa **Guardar equipo**.
+2. En la fila de ese equipo, pulsa **Compartir configuración**. Envía el archivo por AirDrop u otro medio privado al destinatario y arranca allí el cliente con ese archivo. Cada equipo tiene su propio token de acceso y contraseña SOCKS. El iPhone guarda las autorizaciones en su llavero y sigue aplicándolas al volver a abrir la app.
+3. Para retirar un equipo, pulsa **Quitar acceso** en su fila y confirma su nombre. El iPhone cierra sus conexiones TCP y UDP y rechaza las nuevas. Los demás equipos pueden seguir usando la misma sesión. Para volver a autorizarlo, crea un perfil nuevo y entrégale el nuevo archivo.
+
+Un perfil identifica a quien posea el archivo. Si dos equipos usan una copia del mismo archivo, revocarlo afecta a ambos. Al actualizar desde la app 0.3, **Emparejamiento inicial** conserva el acceso anterior. Si ya compartiste ese archivo, crea y prueba un perfil individual para cada receptor antes de retirar el inicial. Retirarlo también desconecta cualquier Mac que todavía lo use. Cerrar y recargar el mismo emparejamiento conserva la lista, incluso si está vacía.
+
+Cada escritorio escucha en loopback. La capacidad celular del iPhone se comparte entre los equipos. Mantén la app visible mientras se usa el túnel.
 
 Para Android, un receptor de todo el dispositivo necesitaría una app con `VpnService`. Para iOS, un receptor equivalente necesitaría Network Extension, la capacidad de firma correspondiente y autorización del usuario. Esas apps tendrían que convertir flujos de red al protocolo CT/1. El permiso de VPN del receptor y el requisito de mantener visible la app emisora son independientes.
 
@@ -57,3 +63,11 @@ python3 -m unittest discover -s tests
 ```
 
 Las pruebas del relay usan sockets de loopback, TLS y certificados temporales. Una prueba física requiere un iPhone con datos celulares y un receptor conectado al hotspot.
+
+Para comprobar la revocación en un iPhone, usa un perfil desechable y otro que deba conservar acceso.
+
+```sh
+python3 tools/test_revocation.py --revoke /ruta/privada/prueba.json --keep /ruta/privada/conservar.json
+```
+
+Espera a que aparezca **CUATRO FLUJOS ACTIVOS** y quita únicamente el perfil de prueba desde el iPhone. El verificador comprueba el cierre y el rechazo de TCP y UDP, mantiene los dos flujos originales del equipo conservado y verifica que pueda abrir otros. Usa consultas DNS a 1.1.1.1 y requiere acceso celular al puerto 53.

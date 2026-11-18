@@ -6,11 +6,12 @@ final class TunnelServer {
     private let queue = DispatchQueue(label: "CellularTunnel.server")
     private var listener: NWListener?
     private var sessions: [UUID: TunnelSession] = [:]
+    private var devices: [PairedDevice] = []
     private var identity: SecIdentity?
     var onStatus: ((String, Int) -> Void)?
     var onFailure: (() -> Void)?
 
-    func start(package: PairingPackage) throws {
+    func start(package: PairingPackage, devices: [PairedDevice]) throws {
         let identity = try package.identity()
         guard let wrapped = sec_identity_create(identity) else { throw TunnelError.invalidPairing }
         let tls = NWProtocolTLS.Options()
@@ -21,6 +22,7 @@ final class TunnelServer {
         let server = try NWListener(using: parameters, on: port)
         queue.async { [self, server] in
             self.stopOnQueue()
+            self.devices = devices
             self.identity = identity
             self.listener = server
             server.stateUpdateHandler = { [weak self, weak server] state in
@@ -35,11 +37,14 @@ final class TunnelServer {
             }
             server.newConnectionHandler = { [weak self] connection in
                 guard let self = self, self.listener === server, self.sessions.count < Wire.maxSessions,
-                      self.sessions.values.lazy.filter({ !$0.authenticated }).count < Wire.maxUnauthenticatedSessions else {
+                      self.sessions.values.lazy.filter({ $0.deviceID == nil }).count < Wire.maxUnauthenticatedSessions else {
                     connection.cancel(); return
                 }
                 let id = UUID()
-                let session = TunnelSession(connection: connection, token: package.token, queue: self.queue) { [weak self] in
+                let session = TunnelSession(connection: connection, queue: self.queue, authenticate: { [weak self] token in
+                    guard let self else { return nil }
+                    return PairedDevice.identify(token, in: self.devices)
+                }) { [weak self] in
                     self?.sessions.removeValue(forKey: id)
                     self?.publish("Servidor activo; salida solo celular.")
                 }
@@ -52,6 +57,16 @@ final class TunnelServer {
     }
 
     func stop() { queue.async { self.stopOnQueue(); self.publish("Detenido.") } }
+    func updateDevices(_ devices: [PairedDevice]) {
+        queue.sync {
+            self.devices = devices
+            let allowed = Set(devices.map(\.id))
+            let revoked = sessions.values.filter { session in
+                session.deviceID.map { !allowed.contains($0) } ?? false
+            }
+            revoked.forEach { $0.cancel() }
+        }
+    }
     private func stopOnQueue() {
         listener?.newConnectionHandler = nil
         listener?.stateUpdateHandler = nil
@@ -59,6 +74,7 @@ final class TunnelServer {
         let current = Array(sessions.values)
         sessions.removeAll()
         current.forEach { $0.cancel() }
+        devices.removeAll()
         identity = nil
     }
     private func publish(_ text: String) {
@@ -70,13 +86,13 @@ final class TunnelServer {
 private final class TunnelSession {
     private let client: NWConnection
     private let reader: WireReader
-    private let token: String
+    private let authenticate: (String) -> UUID?
     private let queue: DispatchQueue
     private var remote: NWConnection?
     private var timer: DispatchSourceTimer?
     private var done = false
     private var acknowledged = false
-    private(set) var authenticated = false
+    private(set) var deviceID: UUID?
     private var udp = false
     private var clientFIN = false
     private var remoteFIN = false
@@ -84,9 +100,10 @@ private final class TunnelSession {
     private var remoteFINWritten = false
     private let onClose: () -> Void
 
-    init(connection: NWConnection, token: String, queue: DispatchQueue, onClose: @escaping () -> Void) {
+    init(connection: NWConnection, queue: DispatchQueue, authenticate: @escaping (String) -> UUID?,
+         onClose: @escaping () -> Void) {
         client = connection; reader = WireReader(connection)
-        self.token = token; self.queue = queue; self.onClose = onClose
+        self.authenticate = authenticate; self.queue = queue; self.onClose = onClose
     }
 
     func start() {
@@ -125,13 +142,13 @@ private final class TunnelSession {
             guard case .success(let bytes) = result,
                   let object = try? JSONSerialization.jsonObject(with: bytes) as? [String: Any],
                   let version = object["v"] as? Int, version == 1,
-                  let supplied = object["token"] as? String, Wire.constantTimeEqual(supplied, self.token),
+                  let supplied = object["token"] as? String, let deviceID = self.authenticate(supplied),
                   let transport = object["transport"] as? String, ["tcp", "udp"].contains(transport),
                   let host = object["host"] as? String, Wire.validHost(host),
                   let port = object["port"] as? Int, (1...65535).contains(port) else {
                 self.reject(); return
             }
-            self.authenticated = true
+            self.deviceID = deviceID
             self.udp = transport == "udp"
             let parameters: NWParameters = self.udp ? .udp : .tcp
             parameters.requiredInterfaceType = .cellular

@@ -23,6 +23,13 @@ El cliente 1.4 reconoce el campo opcional, deja margen para el cierre de TLS y
 aplica un máximo local de 88. Sin el campo, usa el límite anterior de 30. La
 capacidad anunciada corresponde a todo el servidor y se comparte entre equipos.
 
+Desde iOS 0.4, cada configuración de cliente contiene un token aleatorio de 256 bits.
+La app coteja ese token con las autorizaciones vigentes antes de abrir el destino,
+y asocia la conexión a la identidad correspondiente. Una revocación retira el token
+y cierra todas las conexiones de esa identidad. El token original de un paquete
+se registra una vez, como identidad inicial, al migrar el certificado al llavero.
+Los clientes CT/1 existentes conservan el mismo formato de apertura.
+
 ## Tramas después de ACK
 
 `kind:u8 | length:u32 big-endian | payload:length bytes`

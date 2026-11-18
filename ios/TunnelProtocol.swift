@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 import Network
 import Security
 
@@ -65,7 +66,16 @@ struct PairingPackage: Decodable {
         }
         // SecPKCS12Import guarantees the returned identity's Core Foundation type.
         guard CFGetTypeID(raw as CFTypeRef) == SecIdentityGetTypeID() else { throw TunnelError.invalidPairing }
-        return raw as! SecIdentity
+        let identity = raw as! SecIdentity
+        var certificate: SecCertificate?
+        guard SecIdentityCopyCertificate(identity, &certificate) == errSecSuccess, let certificate else {
+            throw TunnelError.invalidPairing
+        }
+        let digest = SHA256.hash(data: SecCertificateCopyData(certificate) as Data)
+        guard digest.map({ String(format: "%02x", $0) }).joined() == certificate_sha256 else {
+            throw TunnelError.invalidPairing
+        }
+        return identity
     }
 }
 

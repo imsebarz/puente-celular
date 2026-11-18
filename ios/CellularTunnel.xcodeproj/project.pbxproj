@@ -7,12 +7,14 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A00000000000000000000033 /* DeviceAccess.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000024 /* DeviceAccess.swift */; };
 		A00000000000000000000030 /* CellularTunnelApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000020 /* CellularTunnelApp.swift */; };
 		A00000000000000000000031 /* TunnelProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000021 /* TunnelProtocol.swift */; };
 		A00000000000000000000032 /* TunnelServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000022 /* TunnelServer.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		A00000000000000000000024 /* DeviceAccess.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceAccess.swift; sourceTree = "<group>"; };
 		A00000000000000000000008 /* CellularTunnel.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CellularTunnel.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A00000000000000000000020 /* CellularTunnelApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CellularTunnelApp.swift; sourceTree = "<group>"; };
 		A00000000000000000000021 /* TunnelProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TunnelProtocol.swift; sourceTree = "<group>"; };
@@ -35,6 +37,7 @@
 			isa = PBXGroup;
 			children = (
 				A00000000000000000000020 /* CellularTunnelApp.swift */,
+				A00000000000000000000024 /* DeviceAccess.swift */,
 				A00000000000000000000021 /* TunnelProtocol.swift */,
 				A00000000000000000000022 /* TunnelServer.swift */,
 				A00000000000000000000023 /* Info.plist */,
@@ -118,6 +121,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A00000000000000000000030 /* CellularTunnelApp.swift in Sources */,
+				A00000000000000000000033 /* DeviceAccess.swift in Sources */,
 				A00000000000000000000031 /* TunnelProtocol.swift in Sources */,
 				A00000000000000000000032 /* TunnelServer.swift in Sources */,
 			);
@@ -154,11 +158,11 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 4;
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Info.plist;
-				MARKETING_VERSION = 0.3.0;
+				MARKETING_VERSION = 0.4.0;
 				PRODUCT_BUNDLE_IDENTIFIER = org.example.PuenteCelular;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -170,11 +174,11 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 4;
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Info.plist;
-				MARKETING_VERSION = 0.3.0;
+				MARKETING_VERSION = 0.4.0;
 				PRODUCT_BUNDLE_IDENTIFIER = org.example.PuenteCelular;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";

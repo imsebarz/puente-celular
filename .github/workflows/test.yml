@@ -21,4 +21,8 @@ jobs:
       - if: runner.os == 'macOS'
         run: python -m unittest discover -s mac/full_tunnel
       - if: runner.os == 'macOS'
+        run: |
+          swiftc ios/DeviceAccess.swift ios/TunnelProtocol.swift tests/device_access/main.swift -o "$RUNNER_TEMP/device-access"
+          "$RUNNER_TEMP/device-access"
+      - if: runner.os == 'macOS'
         run: xcodebuild -quiet -project ios/CellularTunnel.xcodeproj -scheme CellularTunnel -configuration Debug -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO build
